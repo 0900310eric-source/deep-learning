@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Offline DASH Player (Shaka)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.compiled.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 16px; }
+    video { width: 900px; max-width: 95vw; background: #000; }
+    #log { white-space: pre-wrap; background: #f6f6f6; padding: 12px; border-radius: 8px; }
+  </style>
+</head>
+
+<body>
+  <h2>Offline DASH Player (Shaka)</h2>
+  <video id="video" controls autoplay></video>
+  <p><b>MPD:</b> <span id="mpd"></span></p>
+  <div id="log"></div>
+
+  <script>
+    const WIN_IP = "192.168.50.147";   // 改成你現在的 Windows IP
+    const MPD_URL = `http://${WIN_IP}:8000/dash1/stream.mpd?run=${Date.now()}`;
+
+    const mpdSpan = document.getElementById('mpd');
+    const logDiv = document.getElementById('log');
+    const video = document.getElementById('video');
+
+    function log(msg) {
+      console.log(msg);
+      logDiv.textContent += msg + "\n";
+    }
+
+    async function init() {
+      mpdSpan.textContent = MPD_URL;
+
+      shaka.polyfill.installAll();
+      if (!shaka.Player.isBrowserSupported()) {
+        log("Shaka: Browser not supported.");
+        return;
+      }
+
+      const player = new shaka.Player();
+      player.attach(video);
+
+      player.addEventListener('error', (e) => {
+        log("Shaka error event: " + JSON.stringify(e.detail, null, 2));
+      });
+
+      try {
+        log("Loading MPD...");
+        await player.load(MPD_URL);
+        log("Loaded OK. Playing...");
+      } catch (err) {
+        log("Load failed: " + JSON.stringify(err, null, 2));
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

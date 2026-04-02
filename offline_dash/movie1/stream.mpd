@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MPD xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns="urn:mpeg:dash:schema:mpd:2011"
+	xmlns:xlink="http://www.w3.org/1999/xlink"
+	xsi:schemaLocation="urn:mpeg:DASH:schema:MPD:2011 http://standards.iso.org/ittf/PubliclyAvailableStandards/MPEG-DASH_schema_files/DASH-MPD.xsd"
+	profiles="urn:mpeg:dash:profile:isoff-live:2011"
+	type="static"
+	mediaPresentationDuration="PT14M48.0S"
+	maxSegmentDuration="PT2.0S"
+	minBufferTime="PT20.8S">
+	<ProgramInformation>
+		<Title>Sintel</Title>
+	</ProgramInformation>
+	<ServiceDescription id="0">
+	</ServiceDescription>
+	<Period id="0" start="PT0.0S">
+		<AdaptationSet id="0" contentType="video" startWithSAP="1" segmentAlignment="true" bitstreamSwitching="true" frameRate="24/1" maxWidth="1024" maxHeight="436" par="256:109" lang="und">
+			<Representation id="0" mimeType="video/mp4" codecs="avc1.4d401f" bandwidth="827908" width="1024" height="436" sar="1:1">
+				<SegmentTemplate timescale="12288" initialization="init-stream$RepresentationID$.m4s" media="chunk-stream$RepresentationID$-$Number%05d$.m4s" startNumber="1">
+					<SegmentTimeline>
+						<S t="0" d="36864" />
+						<S d="128000" r="1" />
+						<S d="92160" />
+						<S d="128000" />
+						<S d="38912" />
+						<S d="26112" />
+						<S d="66048" />
+						<S d="31232" />
+						<S d="26112" />
+						<S d="28160" />
+						<S d="35328" />
+						<S d="29696" />
+						<S d="43520" />
+						<S d="71680" />
+						<S d="91136" />
+						<S d="53760" />
+						<S d="33280" />
+						<S d="128000" />
+						<S d="55808" />
+						<S d="71680" />
+						<S d="79872" />
+						<S d="28160" />
+						<S d="61440" />
+						<S d="39424" />
+						<S d="57344" />
+						<S d="37376" />
+						<S d="50176" />
+						<S d="35328" />
+						<S d="74240" />
+						<S d="43008" />
+						<S d="65024" />
+						<S d="76800" />
+						<S d="128000" />
+						<S d="48128" />
+						<S d="45056" />
+						<S d="52736" />
+						<S d="28672" />
+						<S d="37888" />
+						<S d="25600" />
+						<S d="33792" />
+						<S d="36864" />
+						<S d="67584" />
+						<S d="35328" />
+						<S d="70656" />
+						<S d="38912" />
+						<S d="55808" />
+						<S d="57344" />
+						<S d="128000" r="1" />
+						<S d="39424" />
+						<S d="33280" />
+						<S d="25600" />
+						<S d="34816" />
+						<S d="41984" />
+						<S d="49664" />
+						<S d="28672" />
+						<S d="74240" />
+						<S d="49152" />
+						<S d="38912" />
+						<S d="57344" />
+						<S d="49664" />
+						<S d="119808" />
+						<S d="67584" />
+						<S d="43520" />
+						<S d="32256" />
+						<S d="26112" />
+						<S d="48128" />
+						<S d="31744" />
+						<S d="36352" />
+						<S d="39424" />
+						<S d="26112" />
+						<S d="28672" />
+						<S d="27136" />
+						<S d="60416" />
+						<S d="26624" />
+						<S d="59392" />
+						<S d="112640" />
+						<S d="138240" />
+						<S d="53760" />
+						<S d="128000" />
+						<S d="37376" />
+						<S d="29184" />
+						<S d="124928" />
+						<S d="46592" />
+						<S d="103936" />
+						<S d="122368" />
+						<S d="60416" />
+						<S d="69120" />
+						<S d="70656" />
+						<S d="33792" />
+						<S d="98816" />
+						<S d="62976" />
+						<S d="36352" />
+						<S d="49152" />
+						<S d="44032" />
+						<S d="29184" />
+						<S d="76288" />
+						<S d="102912" />
+						<S d="44032" />
+						<S d="62976" />
+						<S d="46592" />
+						<S d="42496" />
+						<S d="128000" />
+						<S d="54272" />
+						<S d="36352" />
+						<S d="48128" />
+						<S d="46592" />
+						<S d="85504" />
+						<S d="38912" />
+						<S d="86528" />
+						<S d="33280" />
+						<S d="36864" />
+						<S d="46592" />
+						<S d="35328" />
+						<S d="38400" />
+						<S d="71680" />
+						<S d="27136" />
+						<S d="30720" />
+						<S d="68608" />
+						<S d="26112" />
+						<S d="29696" />
+						<S d="38912" />
+						<S d="40448" />
+						<S d="32256" />
+						<S d="34304" />
+						<S d="49664" />
+						<S d="30208" />
+						<S d="31232" />
+						<S d="36352" />
+						<S d="54272" />
+						<S d="31232" />
+						<S d="39936" />
+						<S d="30208" />
+						<S d="34816" />
+						<S d="33280" />
+						<S d="59904" />
+						<S d="37888" />
+						<S d="151552" />
+						<S d="108544" />
+						<S d="79360" />
+						<S d="92160" />
+						<S d="54272" />
+						<S d="38912" />
+						<S d="45056" />
+						<S d="61440" />
+						<S d="25600" />
+						<S d="32256" />
+						<S d="104448" />
+						<S d="43520" />
+						<S d="128000" />
+						<S d="143360" />
+						<S d="128000" r="2" />
+						<S d="74752" />
+						<S d="41984" r="9" />
+						<S d="128000" r="9" />
+						<S d="28160" />
+					</SegmentTimeline>
+				</SegmentTemplate>
+			</Representation>
+		</AdaptationSet>
+		<AdaptationSet id="1" contentType="audio" startWithSAP="1" segmentAlignment="true" bitstreamSwitching="true" lang="eng">
+			<Representation id="1" mimeType="audio/mp4" codecs="mp4a.40.2" bandwidth="128000" audioSamplingRate="48000">
+				<AudioChannelConfiguration schemeIdUri="urn:mpeg:dash:23003:3:audio_channel_configuration:2011" value="6" />
+				<SegmentTemplate timescale="48000" initialization="init-stream$RepresentationID$.m4s" media="chunk-stream$RepresentationID$-$Number%05d$.m4s" startNumber="1">
+					<SegmentTimeline>
+						<S t="0" d="95232" />
+						<S d="96256" r="440" />
+						<S d="82944" />
+					</SegmentTimeline>
+				</SegmentTemplate>
+			</Representation>
+		</AdaptationSet>
+	</Period>
+</MPD>

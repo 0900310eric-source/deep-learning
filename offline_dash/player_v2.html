@@ -1,0 +1,354 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Offline DASH Player (Shaka) + App-layer Logger</title>
+
+  <!-- 【你未來可能要改 #0】要做到「完全離線」：
+       1) 把 shaka-player.compiled.js 下載下來放到 Windows server 的資料夾（例如跟 player_v2.html 同層）
+       2) 把下面這行改成：  <script src="/shaka-player.compiled.js"></script>
+       目前用 CDN：第一次載頁面會走外網，影片本體仍然是本地 LAN。 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.compiled.js"></script>
+
+  <style>
+    body { font-family: sans-serif; margin: 16px; }
+    video { width: 900px; max-width: 95vw; background: #000; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+    input { padding: 6px 8px; font-size: 14px; }
+    button { padding: 7px 10px; font-size: 14px; cursor: pointer; }
+    #log { white-space: pre-wrap; background: #f6f6f6; padding: 12px; border-radius: 8px; max-height: 260px; overflow: auto; }
+    #stats { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+             background: #0b1020; color: #d7e0ff; padding: 12px; border-radius: 8px; }
+    .kv { display: grid; grid-template-columns: 240px 1fr; gap: 6px 10px; }
+    .muted { color: #666; }
+  </style>
+</head>
+
+<body>
+  <h2>Offline DASH Player (Shaka) + App-layer Logger</h2>
+
+  <div class="row">
+    <!-- 【未來可能要改 #1】Windows server 的 IP -->
+    <label>Windows IP:</label>
+    <input id="ip" value="192.168.50.147" size="14" />
+
+    <!-- 【未來可能要改 #2】HTTP server port -->
+    <label>Port:</label>
+    <input id="port" value="8000" size="6" />
+
+    <!-- 【未來可能要改 #3】MPD 檔案的路徑（換影片就通常只換這個資料夾） -->
+    <label>MPD path:</label>
+    <input id="mpdPath" value="/movie1/stream.mpd" size="24" />
+
+    <!-- 【未來可能要改 #4（可選）】實驗標籤：方便不同 tc/profile 或不同影片時，log 檔名能區分 -->
+    <label>experiment_id:</label>
+    <input id="expId" value="exp_local_dash" size="16" />
+
+    <button id="btnLoad">Load</button>
+    <button id="btnStop">Stop</button>
+    <button id="btnDl">Download logs (CSV)</button>
+    <button id="btnClear">Clear logs</button>
+  </div>
+
+  <div class="row muted">
+    <div><b>MPD:</b> <span id="mpd"></span></div>
+  </div>
+
+  <video id="video" controls autoplay muted></video>
+
+  <h3>Live Stats</h3>
+  <div id="stats"><div class="kv" id="kv"></div></div>
+
+  <h3>Log</h3>
+  <div id="log"></div>
+
+  <script>
+    // =========================
+    // 0) UI & helpers
+    // =========================
+    const ipEl = document.getElementById('ip');
+    const portEl = document.getElementById('port');
+    const mpdPathEl = document.getElementById('mpdPath');
+    const expIdEl = document.getElementById('expId');
+
+    const btnLoad = document.getElementById('btnLoad');
+    const btnStop = document.getElementById('btnStop');
+    const btnDl = document.getElementById('btnDl');
+    const btnClear = document.getElementById('btnClear');
+
+    const mpdSpan = document.getElementById('mpd');
+    const logDiv = document.getElementById('log');
+    const kvDiv = document.getElementById('kv');
+    const video = document.getElementById('video');
+
+    function nowMs() { return performance.now(); }
+    function isoNow() { return new Date().toISOString(); }
+
+    function log(msg) {
+      console.log(msg);
+      logDiv.textContent += msg + "\n";
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // =========================
+    // 0.5) URL parsing helpers (dash_id / rep_id / seg_idx)
+    // =========================
+    // /dash1/... -> "dash1"
+    function dashIdFromUrl(url) {
+      if (!url) return "";
+      const m = url.match(/\/(dash\d+)\//i);
+      return m ? m[1] : "";
+    }
+
+    // chunk-stream2-00102.m4s 或 init-stream2.m4s -> "2"
+    function repIdFromUrl(url) {
+      if (!url) return "";
+      const m = url.match(/(?:chunk|init)-stream(\d+)/i);
+      return m ? m[1] : "";
+    }
+
+    // chunk-streamX-00102.m4s -> "00102"
+    function segIdxFromUrl(url) {
+      if (!url) return "";
+      const m = url.match(/chunk-stream\d+-(\d+)\.m4s/i);
+      return m ? m[1] : "";
+    }
+
+    // =========================
+    // 1) app-layer logs（CSV）
+    // =========================
+    // CSV 欄位固定 13 欄：
+    // time_iso,event,dash_id,req_type,seg_idx,rep_id,method,uri,status,bytes,dur_ms,throughput_mbps,note
+    const reqTrace = new Map(); // request -> {t0, uri, type, method, dashId}
+    const appLogs = [];
+
+    function pushRow(row) { appLogs.push(row); }
+
+    function safeStr(x) {
+      if (x === undefined || x === null) return '';
+      return String(x).replaceAll('"','""');
+    }
+
+    function toCSV() {
+      const header = [
+        "time_iso","event","dash_id","req_type","seg_idx","rep_id","method","uri","status","bytes","dur_ms","throughput_mbps","note"
+      ].join(",");
+      const lines = appLogs.map(r => r.map(v => `"${safeStr(v)}"`).join(","));
+      return [header, ...lines].join("\n");
+    }
+
+    function downloadCSV(filename, text) {
+      const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    // =========================
+    // 2) Shaka player life-cycle
+    // =========================
+    let player = null;
+    let statsTimer = null;
+
+    function buildMpdUrl() {
+      const ip = ipEl.value.trim();
+      const port = portEl.value.trim();
+      const pathRaw = mpdPathEl.value.trim();
+      const path = pathRaw.startsWith("/") ? pathRaw : ("/" + pathRaw);
+      // cache-busting：避免 304 快取干擾實驗
+      return `http://${ip}:${port}${path}?run=${Date.now()}`;
+    }
+
+    function shakaReqTypeName(t) {
+      const RT = shaka.net.NetworkingEngine.RequestType;
+      for (const k of Object.keys(RT)) if (RT[k] === t) return k;
+      return String(t);
+    }
+
+    function bufferedSeconds(videoEl) {
+      const b = videoEl.buffered;
+      if (!b || b.length === 0) return 0;
+      const end = b.end(b.length - 1);
+      return Math.max(0, end - videoEl.currentTime);
+    }
+
+    function startStatsLoop(defaultDashId) {
+      stopStatsLoop();
+      statsTimer = setInterval(() => {
+        if (!player) return;
+
+        const s = player.getStats();
+        const note = `ct=${video.currentTime.toFixed(3)} buf=${bufferedSeconds(video).toFixed(3)} w=${s.width} h=${s.height} drop=${s.droppedFrames}`;
+
+        // STATS：req_type/seg_idx/rep_id/method/uri/... 不適用就空白
+        pushRow([isoNow(), "STATS", defaultDashId, "", "", "", "", "", "", "", "", ((s.estimatedBandwidth ?? 0) / 1e6).toFixed(3), note]);
+
+        const fields = {
+          "dash_id": defaultDashId || "(unknown)",
+          "video.currentTime (s)": video.currentTime.toFixed(3),
+          "video.buffered (s)": bufferedSeconds(video).toFixed(3),
+          "shaka.estimatedBandwidth (Mbps)": ((s.estimatedBandwidth ?? 0) / 1e6).toFixed(3),
+          "resolution": `${s.width ?? "?"} x ${s.height ?? "?"}`,
+          "droppedFrames": s.droppedFrames ?? "?",
+          "decodedFrames": s.decodedFrames ?? "?",
+        };
+        kvDiv.innerHTML = "";
+        for (const [k, val] of Object.entries(fields)) {
+          const kEl = document.createElement("div"); kEl.textContent = k;
+          const vEl = document.createElement("div"); vEl.textContent = val;
+          kvDiv.appendChild(kEl); kvDiv.appendChild(vEl);
+        }
+      }, 500);
+    }
+
+    function stopStatsLoop() {
+      if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+    }
+
+    async function stop() {
+      stopStatsLoop();
+      if (player) {
+        try { await player.destroy(); } catch (_) {}
+        player = null;
+      }
+      reqTrace.clear();
+      try { video.pause(); } catch (_) {}
+      try { video.removeAttribute("src"); video.load(); } catch (_) {}
+    }
+
+    async function init() {
+      const MPD_URL = buildMpdUrl();
+      const DASH_ID = dashIdFromUrl(MPD_URL) || dashIdFromUrl(mpdPathEl.value.trim());
+      mpdSpan.textContent = MPD_URL;
+
+      shaka.polyfill.installAll();
+      if (!shaka.Player.isBrowserSupported()) {
+        log("Shaka: Browser not supported.");
+        return;
+      }
+
+      await stop();
+
+      player = new shaka.Player();
+      window.player = player;
+      await player.attach(video);
+
+      // 【未來可能要改 #5（可選）】播放器 buffer 參數
+      player.configure({
+        streaming: {
+          bufferingGoal: 10,
+          rebufferingGoal: 2,
+          retryParameters: { maxAttempts: 2 },
+        }
+      });
+
+      // ---- Shaka error ----
+      player.addEventListener('error', (e) => {
+        log("Shaka error: " + JSON.stringify(e.detail, null, 2));
+        pushRow([isoNow(), "SHAKA_ERROR", DASH_ID, "", "", "", "", "", "", "", "", "", JSON.stringify(e.detail)]);
+      });
+
+      // ---- Networking filters ----
+      const net = player.getNetworkingEngine();
+
+      net.registerRequestFilter((type, request) => {
+        const uri = (request.uris && request.uris[0]) ? request.uris[0] : "";
+        const method = request.method || "GET";
+        const dashId = dashIdFromUrl(uri) || DASH_ID;
+
+        reqTrace.set(request, { t0: nowMs(), uri, type, method, dashId });
+
+        const typeName = shakaReqTypeName(type);
+        // REQ_START：seg_idx/rep_id 先留空（以 response.uri 的結果為準）
+        pushRow([isoNow(), "REQ_START", dashId, typeName, "", "", method, uri, "", "", "", "", ""]);
+      });
+
+      net.registerResponseFilter((type, response) => {
+        const typeName = shakaReqTypeName(type);
+        const uri = response.uri || "";
+        const bytes = response.data ? response.data.byteLength : 0;
+
+        const dashId = dashIdFromUrl(uri) || DASH_ID;
+        const segIdx = segIdxFromUrl(uri);     // 只有 chunk 才有
+        const repId  = repIdFromUrl(uri);      // init/chunk 都抓得到
+
+        // 粗略配對：找同 URI + 同 type 的 request
+        let matched = null;
+        for (const [req, meta] of reqTrace.entries()) {
+          if (meta.uri === uri && meta.type === type) { matched = { req, meta }; break; }
+        }
+
+        const t1 = nowMs();
+        const durMs = matched ? (t1 - matched.meta.t0) : "";
+        if (matched) reqTrace.delete(matched.req);
+
+        const thrMbps = (durMs && bytes)
+          ? ((bytes * 8) / (durMs / 1000) / 1e6)
+          : "";
+
+        const method = matched ? matched.meta.method : "GET";
+
+        pushRow([
+          isoNow(), "REQ_END", dashId, typeName, segIdx, repId, method, uri,
+          "", bytes, durMs ? durMs.toFixed(1) : "", thrMbps ? thrMbps.toFixed(3) : "", ""
+        ]);
+      });
+
+      // ---- Video events：估 rebuffer / stall ----
+      ["playing","pause","waiting","stalled","seeking","seeked","ended"].forEach(ev => {
+        video.addEventListener(ev, () => {
+          const note = `${ev} ct=${video.currentTime.toFixed(3)} buf=${bufferedSeconds(video).toFixed(3)} rs=${video.readyState}`;
+          pushRow([isoNow(), "VIDEO_EVT", DASH_ID, "", "", "", "", "", "", "", "", "", note]);
+        });
+      });
+
+      // ---- Load MPD ----
+      pushRow([isoNow(), "LOAD_MPD", DASH_ID, "", "", "", "GET", MPD_URL, "", "", "", "", ""]);
+      log("Loading MPD...");
+
+      try {
+        await player.load(MPD_URL);
+        log("Loaded OK. Playing...");
+        pushRow([isoNow(), "PLAY_START", DASH_ID, "", "", "", "", "", "", "", "", "", ""]);
+        startStatsLoop(DASH_ID);
+      } catch (err) {
+        log("Load failed: " + JSON.stringify(err, null, 2));
+        pushRow([isoNow(), "LOAD_FAIL", DASH_ID, "", "", "", "", MPD_URL, "", "", "", "", JSON.stringify(err)]);
+      }
+    }
+
+    // =========================
+    // 3) Buttons
+    // =========================
+    btnLoad.addEventListener('click', () => init());
+    btnStop.addEventListener('click', () => stop());
+
+    btnClear.addEventListener('click', () => {
+      logDiv.textContent = "";
+      appLogs.length = 0;
+      pushRow([isoNow(), "CLEAR", "", "", "", "", "", "", "", "", "", "", ""]);
+      log("Logs cleared.");
+    });
+
+    btnDl.addEventListener('click', () => {
+      const expId = expIdEl.value.trim() || "exp";
+      const ip = ipEl.value.trim();
+
+      // 把 mpdPath 也放進檔名，避免同一天跑不同資料夾混在一起
+      const mpdPath = mpdPathEl.value.trim().replaceAll("/", "_"); // 例如 _dash1_stream.mpd
+      const csv = toCSV();
+
+      downloadCSV(`shaka_applayer_${expId}_${ip}${mpdPath}_${Date.now()}.csv`, csv);
+      log("Downloaded CSV.");
+    });
+
+    // Auto init（如果不想自動載入，把下面這行註解掉）
+    init();
+  </script>
+</body>
+</html>
